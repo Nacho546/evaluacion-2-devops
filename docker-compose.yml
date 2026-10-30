@@ -1,44 +1,50 @@
 version: '3.8'
 
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: microservicio-app:latest
-    container_name: microservicio_api
-    ports:
-      - "8000:8000"
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
     environment:
-      - DATABASE_URL=postgresql://usuario:password123@db:5432/mibasedatos
-      - APP_ENV=production
-    depends_on:
-      db:
-        condition: service_healthy
+      POSTGRES_USER: devops_user
+      POSTGRES_PASSWORD: devops_password
+      POSTGRES_DB: devops_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devops_user -d devops_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
           cpus: '0.50'
-          memory: 512M
-    restart: always
+          memory: 256M
 
-  db:
-    image: postgres:15-alpine
-    container_name: microservicio_db
-    environment:
-      POSTGRES_USER: usuario
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: mibasedatos
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U usuario -d mibasedatos"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+  web:
+    build: .
+    container_name: fastapi_app
     restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://devops_user:devops_password@db:5432/devops_db
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
 volumes:
-  postgres_data:
+  pgdata:
