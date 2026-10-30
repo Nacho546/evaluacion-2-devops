@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: microservicio-app:latest
+    container_name: microservicio_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://usuario:password123@db:5432/mibasedatos
+      - APP_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    container_name: microservicio_db
+    environment:
+      POSTGRES_USER: usuario
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: mibasedatos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usuario -d mibasedatos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+volumes:
+  postgres_data:
