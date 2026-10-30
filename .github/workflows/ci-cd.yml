@@ -1,0 +1,81 @@
+name: CI/CD Pipeline - Microservicio
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  unit-tests:
+    name: Pruebas Unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar PyTest
+        run: |
+          pytest -v tests/
+
+  security-scan:
+    name: Escaneo de Seguridad y Vulnerabilidades
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Construir imagen local para escaneo
+        run: |
+          docker build -t app-security-check:${{ github.sha }} .
+
+      - name: Escaneo de Seguridad con Aquasec Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'app-security-check:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL'
+
+  deploy-simulated:
+    name: Despliegue en Entorno Simulado
+    needs: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Trazabilidad - Registrar metadata del commit
+        run: |
+          echo "Desplegando versión del commit: ${{ github.sha }}"
+          echo "Rama origen: ${{ github.ref }}"
+          echo "Autor: ${{ github.actor }}"
+
+      - name: Levantar arquitectura orquestada
+        run: |
+          docker compose up -d --build
+
+      - name: Comprobación de salud del despliegue (Smoke Test)
+        run: |
+          sleep 10
+          docker compose ps
+          curl --fail http://localhost:8000/health || exit 1
+
+      - name: Apagar servicios de prueba
+        if: always()
+        run: |
+          docker compose down -v
